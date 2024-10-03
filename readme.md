@@ -1,6 +1,6 @@
 # wgpu memory leak
 
-This is minimal (could be smaller I guess) reproducing example for memory leaking bug in wgpu.
+This is minimal (could be smaller I guess) reproducing example for memory leaking bug in wgpu ([issue](https://github.com/gfx-rs/wgpu/issues/6143)).
 
 ## Environment
 
@@ -24,10 +24,4 @@ cargo build
 
 Table for (Windows 10 / Vulkan) from Task Manager:
 
-| Memory (MB) | Datetime |
-| --- | --- |
-| 216 | 02.12.2024 22:14:00 |
-| 227 | 02.10.2024 22:24:00 |
-| 676 | 03.10.2024 06:27:00 |
-
-To summarize: for 493 minutes it leaks 460 MB, which is 955 KB per second, or **16 KB per frame**.
+60 mb/hour ~ 1 mb/minute ~ 17 kb/sec ~ **290 bytes/frame**

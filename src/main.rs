@@ -17,6 +17,7 @@ struct State<'a> {
     uniform_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     frame: u64,
+    uniform_aligned_size: u64,
     window: &'a Window,
 }
 
@@ -39,41 +40,22 @@ impl<'a> State<'a> {
             .unwrap();
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    label: None,
-                    memory_hints: Default::default(),
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor::default(), None)
             .await
             .unwrap();
 
-        let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(surface_caps.formats[0]);
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
+        let config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .unwrap();
 
-        let uniform_alignment = device.limits().min_uniform_buffer_offset_alignment;
+        let uniform_size = (mem::size_of::<f32>() * 2) as u64;
+        let uniform_alignment = device.limits().min_uniform_buffer_offset_alignment as u64;
+        let uniform_aligned_size = uniform_size * uniform_alignment;
+
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Uniform Buffer"),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            size: (((mem::size_of::<f32>() * 2) as u32) * uniform_alignment) as u64,
+            size: uniform_aligned_size,
             mapped_at_creation: false,
         });
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -84,7 +66,7 @@ impl<'a> State<'a> {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new((mem::size_of::<f32>() * 2) as u64),
+                    min_binding_size: wgpu::BufferSize::new(uniform_size),
                 },
                 count: None,
             }],
@@ -127,21 +109,9 @@ impl<'a> State<'a> {
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
+            primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
+            multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
         });
@@ -160,6 +130,7 @@ impl<'a> State<'a> {
             render_pipeline,
             uniform_buffer,
             bind_group,
+            uniform_aligned_size,
             frame,
         }
     }
@@ -184,12 +155,9 @@ impl<'a> State<'a> {
             .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
         self.frame = self.frame + 1;
-        let uniform_alignment = self.device.limits().min_uniform_buffer_offset_alignment;
         let factor = (self.frame as f32) * 0.01_f32;
         if factor > std::f32::consts::PI * 2_f32 {
             self.frame = 0
@@ -199,51 +167,21 @@ impl<'a> State<'a> {
         self.queue.write_buffer(&self.uniform_buffer, 0, unsafe {
             std::slice::from_raw_parts(
                 uniform_data.as_ptr() as *const u8,
-                (((mem::size_of::<f32>() * 2) as u32) * uniform_alignment) as usize,
+                self.uniform_aligned_size as usize,
             )
         });
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-        }
-
-        {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
+                ..wgpu::RenderPassDescriptor::default()
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
