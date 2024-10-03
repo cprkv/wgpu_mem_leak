@@ -30,4 +30,4 @@ Table for (Windows 10 / Vulkan) from Task Manager:
 | 227 | 02.10.2024 22:24:00 |
 | 676 | 03.10.2024 06:27:00 |
 
-To summarize: for 493 minutes it leaks 460 MB, which is 955 KB per second, or **16 KB per frame**.
+To summarize: 460 mb/493 minutes ~ 471040 kb/29580 sec ~ 16 kb/sec ~ **272 bytes/frame**
