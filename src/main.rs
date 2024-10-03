@@ -7,6 +7,59 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
+struct FrameResources {
+    buffers: Vec<wgpu::Buffer>,
+    bind_groups: Vec<wgpu::BindGroup>,
+    current_frame: usize,
+}
+
+impl FrameResources {
+    fn new(device: &wgpu::Device, size: u64, layout: &wgpu::BindGroupLayout) -> Self {
+        let mut buffers = Vec::new();
+        let mut bind_groups = Vec::new();
+
+        for _ in 0..3 {
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                size,
+                mapped_at_creation: false,
+            });
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+                label: None,
+            });
+            buffers.push(buffer);
+            bind_groups.push(bind_group);
+        }
+
+        Self {
+            buffers,
+            bind_groups,
+            current_frame: 0,
+        }
+    }
+
+    fn get_current_buffer(&self) -> &wgpu::Buffer {
+        &self.buffers[self.current_frame]
+    }
+
+    fn get_current_bind_group(&self) -> &wgpu::BindGroup {
+        &self.bind_groups[self.current_frame]
+    }
+
+    fn next_frame(&mut self) {
+        self.current_frame += 1;
+        if self.current_frame >= self.buffers.len() {
+            self.current_frame = 0;
+        }
+    }
+}
+
 struct State<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
@@ -14,8 +67,7 @@ struct State<'a> {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
-    uniform_buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
+    frame_resources: FrameResources,
     frame: u64,
     uniform_aligned_size: u64,
     window: &'a Window,
@@ -26,7 +78,7 @@ impl<'a> State<'a> {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
+            backends: wgpu::Backends::DX12,
             ..Default::default()
         });
 
@@ -52,12 +104,6 @@ impl<'a> State<'a> {
         let uniform_alignment = device.limits().min_uniform_buffer_offset_alignment as u64;
         let uniform_aligned_size = uniform_size * uniform_alignment;
 
-        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Uniform Buffer"),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            size: uniform_aligned_size,
-            mapped_at_creation: false,
-        });
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Bind Group Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -71,14 +117,9 @@ impl<'a> State<'a> {
                 count: None,
             }],
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-            label: None,
-        });
+
+        let frame_resources =
+            FrameResources::new(&device, uniform_aligned_size, &bind_group_layout);
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
@@ -128,8 +169,7 @@ impl<'a> State<'a> {
             config,
             size,
             render_pipeline,
-            uniform_buffer,
-            bind_group,
+            frame_resources,
             uniform_aligned_size,
             frame,
         }
@@ -149,6 +189,9 @@ impl<'a> State<'a> {
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        let buffer = &self.frame_resources.get_current_buffer();
+        let bind_group = &self.frame_resources.get_current_bind_group();
+
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -164,7 +207,7 @@ impl<'a> State<'a> {
         }
         let uniform_data = [factor.sin(), factor.cos()];
 
-        self.queue.write_buffer(&self.uniform_buffer, 0, unsafe {
+        self.queue.write_buffer(&buffer, 0, unsafe {
             std::slice::from_raw_parts(
                 uniform_data.as_ptr() as *const u8,
                 self.uniform_aligned_size as usize,
@@ -185,12 +228,13 @@ impl<'a> State<'a> {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.set_bind_group(0, &bind_group, &[]);
             render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
+        self.frame_resources.next_frame();
 
         Ok(())
     }
