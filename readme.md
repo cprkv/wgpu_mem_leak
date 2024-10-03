@@ -1,6 +1,6 @@
 # wgpu memory leak
 
-This is minimal (could be smaller I guess) reproducing example for memory leaking bug in wgpu ([issue](https://github.com/gfx-rs/wgpu/issues/6143)).
+This is minimal (could be smaller I guess) reproducing example for memory leaking (RAM) bug in wgpu ([issue](https://github.com/gfx-rs/wgpu/issues/6143)). This only happens on Vulkan backend. But in wgpu-native I having same issue for DX12 too.
 
 ## Environment
 
@@ -11,7 +11,7 @@ This is minimal (could be smaller I guess) reproducing example for memory leakin
 | Driver | Nvidia 560.94 |
 | Rust | 1.81.0 (2dbb1af80 2024-08-20) |
 | WGPU | 22.1.0 |
-| Backend | Vulkan, DX12 |
+| Backend | Vulkan |
 
 ## How to run
 
@@ -22,7 +22,7 @@ cargo build
 
 ## How bad is leakage?
 
-Table for (Windows 10 / Vulkan) from Task Manager:
+Table of Physical memory usage from Task Manager:
 
 | Memory (MB) | Datetime |
 | --- | --- |
