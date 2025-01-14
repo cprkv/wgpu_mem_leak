@@ -1,6 +1,7 @@
 # wgpu memory leak
 
-This is minimal (could be smaller I guess) reproducing example for memory leaking bug in wgpu ([issue](https://github.com/gfx-rs/wgpu/issues/6143)).
+This is minimal (could be smaller I guess) reproducing example for memory leaking bug in wgpu ([issue](https://github.com/gfx-rs/wgpu/issues/6143)).  
+**In wgpu 23.0.1 problem is fixed**
 
 ## Environment
 
