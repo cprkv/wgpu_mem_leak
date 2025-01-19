@@ -2,6 +2,8 @@
 
 This is minimal (could be smaller I guess) reproducing example for memory leaking (RAM) bug in wgpu ([issue](https://github.com/gfx-rs/wgpu/issues/6143)). This only happens on Vulkan backend. But in wgpu-native I having same issue for DX12 too.
 
+**Problem solved with upgrading wgpu to version 23.0.1!**
+
 ## Environment
 
 |  |  |
